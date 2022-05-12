@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>leaflet-map-csv</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+	<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.3.0/dist/MarkerCluster.css" />
+	<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.3.0/dist/MarkerCluster.Default.css" />
+	<link rel="stylesheet" href="css/Controls.css" />
+	<link rel="stylesheet" href="css/Style.css" />
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
+	<!-- Load Leaflet code library - see updates at http://leafletjs.com/download.html -->
+	<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+	<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+	<script src='https://npmcdn.com/csv2geojson@latest/csv2geojson.js'></script>
+	<script src="https://unpkg.com/leaflet.markercluster@1.3.0/dist/leaflet.markercluster.js"></script>
+	<script src="js/L.Control.Locate.js" ></script>
+	<script src="js/Control.FullScreen.js"></script>
+	<script src="js/leaflet.zoomhome.min.js"></script>
+	
+	<style>
+		body { margin:0; padding:0; }
+		#map { position:absolute; top:0; bottom:0; width:100%; }
+	</style>
+	</head>
+	<body>
+		<div id='map'></div>
+		<script>
+			
+			const map = L.map('map', {
+				center: [20.8032,-156.3382],
+				zoomControl: false,
+				zoom: 10, 
+			});
+			/* Control panel to display map layers */
+			const mapbox = L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+				maxZoom: 18,
+				attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+					'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+				id: 'mapbox/streets-v11',
+				tileSize: 512,
+				zoomOffset: -1
+			});
+			
+			const CartoDB_Voyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+				attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+				subdomains: 'abcd',
+				maxZoom: 20
+			});
+									
+			const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+				maxZoom: 19,
+				attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+			}).addTo(map);
+			
+			var baseLayers = {
+				"Open Street Map": osm,
+				"Map Box": mapbox,
+				"CartoDB Voyager":CartoDB_Voyager
+			};
+			var overlay={};			
+			layersControl = new L.Control.Layers(baseLayers, overlay, {
+				collapsed: false
+			});
+
+			map.addControl(layersControl);
+			
+			var zoomHome = L.Control.zoomHome();
+			zoomHome.addTo(map);
+
+			var fsControl = L.control.fullscreen();
+			// add fullscreen control to the map
+			map.addControl(fsControl);
+
+			// detect fullscreen toggling
+			map.on('enterFullscreen', function(){
+				if(window.console) window.console.log('enterFullscreen');
+			});
+			map.on('exitFullscreen', function(){
+				if(window.console) window.console.log('exitFullscreen');
+			});
+			// GPS Location control
+			lc = L.control.locate({
+				strings: {
+					title: " Current Location"
+				}
+			}).addTo(map);
+			
+			const url = 'csv2json.php';
+			$.getJSON(url, function(data) { 
+				var categories = new Set();
+				for (i = 0; i < data.features.length; i++) {
+					categories.add(data.features[i].properties.Legend);	
+				};
+                var legend = L.control({position: 'bottomleft'});
+				categories.forEach(function(category) {	
+							
+							var markerIcon = L.icon({
+								iconUrl: 'icons/' + category + '.png'
+							});
+							var layer = L.geoJson(data, {
+							filter: function(feature, layer) {
+								return (feature.properties.Legend === category);
+							},
+							pointToLayer: function(feature, latlng) {
+
+								return L.marker(latlng, {icon: markerIcon});
+							   },  
+							onEachFeature: function (feature, layer) {
+							if (feature.properties) {
+							var customOptions =
+								{
+								'maxWidth': '500',
+								'width': '200',
+								'className' : 'popupCustom'
+								};
+							var content =`
+										<div class="popup">
+											<div class="popup-content">
+												<div>
+												  <span style="padding-right:3px; padding-top: 3px; display:block;">
+													<img class="manImg" src=${feature.properties.ImageLink}></img>
+												  </span>
+												</div>
+												<div class="popup-content-att">
+													<h3><i class="fa_padd fa-solid fa-map-pin"></i>${feature.properties.BusinessName}</h3>
+													<p><i class="fa_padd fa-solid fa-location-dot"></i>${feature.properties.Address}</p>
+													<div class="item-toolbar">
+														<p><i class="item-phone fa_padd fa-solid fa-phone"></i>${feature.properties.Phone}</p>
+														<p><a class="item-web" href=${feature.properties.Website}><i class="fa_padd fa-solid fa-globe"></i>web site</a></p>
+													</div>
+												</div>			
+											</div>
+										</div>
+										`;
+							layer.bindPopup(content, customOptions);
+					}
+				}
+						});
+					map.addLayer(layer, category);
+				  layersControl.addOverlay(layer, category);
+				});
+			});			
+			
+
+		</script>
+	</body>
+</html>
